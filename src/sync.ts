@@ -2,6 +2,8 @@ import {
   S3Client,
   PutObjectCommand,
   ListObjectsV2Command,
+  GetObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import {
   defineSyncProvider,
@@ -32,7 +34,6 @@ function parse(value: unknown): Config {
   };
 }
 
-/** 首轮迁移对齐旧桌面S3；CLI的签名读取差异另行处理。 */
 export class S3SyncProvider implements SyncProvider {
   constructor(private readonly config: Config) {}
   private client() {
@@ -50,21 +51,6 @@ export class S3SyncProvider implements SyncProvider {
     return this.config.pathPrefix
       ? this.config.pathPrefix.replaceAll(/\/$|^\//g, "") + "/" + name
       : name;
-  }
-  private url(name: string) {
-    const key = this.key(name);
-    const endpoint =
-      this.config.endpoint || `https://s3.${this.config.region}.amazonaws.com`;
-    if (this.config.urlStyle === "virtualHosted") {
-      if (this.config.endpoint) {
-        const url = new URL(this.config.endpoint);
-        return `${url.protocol}//${this.config.bucket}.${url.host}/${key}`;
-      }
-      return `https://${this.config.bucket}.s3.${this.config.region}.amazonaws.com/${key}`;
-    }
-    return (
-      endpoint.replaceAll(/\/$|^\//g, "") + "/" + this.config.bucket + "/" + key
-    );
   }
   uploadFile(name: string, content: Uint8Array): Promise<boolean> {
     return this.put(name, content, false);
@@ -93,15 +79,41 @@ export class S3SyncProvider implements SyncProvider {
     }
   }
   async downloadFile(name: string): Promise<Uint8Array> {
-    const response = await fetch(this.url(name));
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return new Uint8Array(await response.arrayBuffer());
+    const client = this.client();
+    try {
+      const response = await client.send(
+        new GetObjectCommand({
+          Bucket: this.config.bucket,
+          Key: this.key(name),
+        }),
+      );
+      const bytes = await response.Body?.transformToByteArray();
+      if (!bytes) throw new Error("S3返回空响应体");
+      return bytes;
+    } finally {
+      client.destroy();
+    }
   }
   async fileExists(name: string): Promise<boolean> {
-    const response = await fetch(this.url(name), { method: "HEAD" });
-    if (response.status === 404) return false;
-    if (!response.ok) throw new Error(`S3 对象检查失败：${response.status}`);
-    return true;
+    const client = this.client();
+    try {
+      await client.send(
+        new HeadObjectCommand({
+          Bucket: this.config.bucket,
+          Key: this.key(name),
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (
+        (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode === 404
+      )
+        return false;
+      throw error;
+    } finally {
+      client.destroy();
+    }
   }
   async listFiles(prefix?: string): Promise<RemoteFileInfo[]> {
     const base = this.config.pathPrefix

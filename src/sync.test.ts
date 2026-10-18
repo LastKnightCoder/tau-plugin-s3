@@ -35,6 +35,7 @@ beforeEach(async () => {
         "<Error><Code>" + code + "</Code><Message>test</Message></Error>",
       );
     };
+    if (!req.headers.authorization) return fail(403, "AccessDenied");
     if (
       key.endsWith("denied") ||
       url.searchParams.get("prefix")?.endsWith("denied")
@@ -107,7 +108,7 @@ afterEach(async () => {
   );
 });
 
-it("保留字节上传与桌面读取方式，普通覆盖不加条件头", async () => {
+it("私有桶读写均使用签名，普通覆盖不加条件头", async () => {
   expect(await provider.uploadFile("data", bytes("first"))).toBe(true);
   expect(await provider.fileExists("data")).toBe(true);
   expect(new TextDecoder().decode(await provider.downloadFile("data"))).toBe(
@@ -123,7 +124,7 @@ it("保留字节上传与桌面读取方式，普通覆盖不加条件头", asyn
   expect(
     requests
       .filter((item) => item.method === "GET" || item.method === "HEAD")
-      .every((item) => !item.signed),
+      .every((item) => item.signed),
   ).toBe(true);
 });
 it("条件创建返回boolean，冲突或请求失败沿用false，不覆盖已有对象", async () => {
@@ -151,7 +152,13 @@ it("分页在插件内部聚合，保留列表字段与旧桌面失败处理", a
 });
 it("不存在返回false，读取失败和无权限仍抛错", async () => {
   expect(await provider.fileExists("missing")).toBe(false);
-  await expect(provider.downloadFile("missing")).rejects.toThrow("404");
-  await expect(provider.fileExists("denied")).rejects.toThrow("403");
-  await expect(provider.downloadFile("denied")).rejects.toThrow("403");
+  await expect(provider.downloadFile("missing")).rejects.toMatchObject({
+    $metadata: { httpStatusCode: 404 },
+  });
+  await expect(provider.fileExists("denied")).rejects.toMatchObject({
+    $metadata: { httpStatusCode: 403 },
+  });
+  await expect(provider.downloadFile("denied")).rejects.toMatchObject({
+    $metadata: { httpStatusCode: 403 },
+  });
 });
