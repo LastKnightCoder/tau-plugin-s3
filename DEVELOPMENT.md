@@ -1,5 +1,18 @@
 # 开发与构建
 
+## 自动发布
+
+本仓库的.github/workflows/release.yml与公开模板一致。同步更新package.json和manifest.json版本并提交后，推送对应版本tag即可自动安装依赖、运行测试（若定义）、构建并将ZIP上传到GitHub Release，无需手动上传或配置额外Token。
+
+```sh
+version=$(node -p "require('./manifest.json').version")
+git tag "v$version"
+git push origin HEAD
+git push origin "v$version"
+```
+
+tag也可不带v前缀，版本必须与两个文件一致；预发布版本自动标记为Pre-release。Actions失败可重跑，已有Release会更新同名ZIP。已发布版本不要移动tag，代码修复应提高版本再发布。仓库需启用Actions并允许contents:write。Git远程统一使用SSH；该流程不自动提交插件中心审核或更新客户端固定产物。
+
 需要Node.js 22及以上、pnpm 11.9.0。依赖全部来自公开npm，不需要Tau源码或本地SDK快照。
 
 ```sh
