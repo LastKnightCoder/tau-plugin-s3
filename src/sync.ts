@@ -73,8 +73,9 @@ export class S3SyncProvider implements SyncProvider {
     return this.put(name, content, true);
   }
   private async put(name: string, content: Uint8Array, createOnly: boolean) {
-    const client = this.client();
+    let client: S3Client | undefined;
     try {
+      client = this.client();
       await client.send(
         new PutObjectCommand({
           Bucket: this.config.bucket,
@@ -88,7 +89,7 @@ export class S3SyncProvider implements SyncProvider {
       // 沿用桌面返回false的控制流，发布者仍会读取后继记录确认结果。
       return false;
     } finally {
-      client.destroy();
+      client?.destroy();
     }
   }
   async downloadFile(name: string): Promise<Uint8Array> {
@@ -108,9 +109,10 @@ export class S3SyncProvider implements SyncProvider {
       : "";
     const extra = prefix ? prefix.replace(/^\/+/, "").replace(/\/+$/, "") : "";
     const combined = [base, extra].filter(Boolean).join("/");
-    const client = this.client(),
-      files: RemoteFileInfo[] = [];
+    let client: S3Client | undefined;
+    const files: RemoteFileInfo[] = [];
     try {
+      client = this.client();
       let cursor: string | undefined;
       do {
         const page = await client.send(
@@ -148,7 +150,7 @@ export class S3SyncProvider implements SyncProvider {
       // 旧桌面将列举失败转为空列表，本次不混入错误策略调整。
       return [];
     } finally {
-      client.destroy();
+      client?.destroy();
     }
   }
 }
