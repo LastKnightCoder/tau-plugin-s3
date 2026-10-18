@@ -8,16 +8,24 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "build:backend": "pnpm check && node build.mjs"
+    "build:backend": "pnpm check && node build.mjs",
+    "build": "pnpm check && node package.mjs",
+    "install:local": "node install-local.mjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.948.0"
+    "@aws-sdk/client-s3": "3.948.0",
+    "@tau/ui": "file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-ui-0.1.1.tgz",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   },
   "devDependencies": {
-    "@tau/plugins": "link:../editor/packages/plugins",
+    "@tau/plugins": "file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-plugins-0.8.0.tgz",
     "@types/node": "^24.0.0",
     "typescript": "5.8.3",
     "vitest": "^3.2.4",
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "adm-zip": "0.5.16",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0"
   }
 }

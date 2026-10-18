@@ -1,5 +1,10 @@
 import { createServer, type Server } from "node:http";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("@tau/plugins/sync", () => ({
+  defineSyncProvider: (
+    definition: import("@tau/plugins/sync").SyncProviderDefinition,
+  ) => definition,
+}));
 import storage from "./sync";
 import type { SyncProvider } from "@tau/plugins/sync";
 
