@@ -1,14 +1,10 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-vi.mock("@tau/plugins/sync", () => ({
-  defineSyncProvider: (
-    definition: import("@tau/plugins/sync").SyncProviderDefinition,
-  ) => definition,
-}));
-import storage from "./sync";
+import { createS3SyncProvider } from "./sync";
 import type { SyncProvider } from "@tau/plugins/sync";
 
 let server: Server, provider: SyncProvider;
+const transport = vi.fn(globalThis.fetch);
 const objects = new Map<string, Buffer>();
 const requests: {
   method: string;
@@ -18,6 +14,7 @@ const requests: {
 }[] = [];
 const bytes = (value: string) => new TextEncoder().encode(value);
 beforeEach(async () => {
+  transport.mockClear();
   objects.clear();
   requests.length = 0;
   server = createServer(async (req, res) => {
@@ -91,15 +88,18 @@ beforeEach(async () => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server");
-  provider = storage.create({
-    endpoint: "http://127.0.0.1:" + address.port,
-    bucket: "bucket",
-    region: "test-region",
-    accessKeyId: "test-only",
-    secretAccessKey: "test-only",
-    urlStyle: "path",
-    pathPrefix: "/sync",
-  });
+  provider = createS3SyncProvider(
+    {
+      endpoint: "http://127.0.0.1:" + address.port,
+      bucket: "bucket",
+      region: "test-region",
+      accessKeyId: "test-only",
+      secretAccessKey: "test-only",
+      urlStyle: "path",
+      pathPrefix: "/sync",
+    },
+    transport,
+  );
 });
 afterEach(async () => {
   server.closeAllConnections();
@@ -110,6 +110,7 @@ afterEach(async () => {
 
 it("私有桶读写均使用签名，普通覆盖不加条件头", async () => {
   expect(await provider.uploadFile("data", bytes("first"))).toBe(true);
+  expect(new Headers(transport.mock.calls[0][1]?.headers).get("content-length")).toBe("5");
   expect(await provider.fileExists("data")).toBe(true);
   expect(new TextDecoder().decode(await provider.downloadFile("data"))).toBe(
     "first",

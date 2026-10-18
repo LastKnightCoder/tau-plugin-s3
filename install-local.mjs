@@ -25,7 +25,7 @@ const packaged = JSON.parse(zip.readAsText(`${manifest.id}/manifest.json`));
 if (
   packaged.main !== "main.js" ||
   (packaged.styles !== undefined && packaged.styles !== "main.css") ||
-  (packaged.sync !== undefined && packaged.sync !== "sync.js")
+  packaged.sync !== undefined
 )
   throw new Error("ZIP入口与模板约定不一致");
 const allowed = [
@@ -35,7 +35,6 @@ const allowed = [
   "README.md",
   "LICENSE",
   "CHANGELOG.md",
-  ...(packaged.sync ? ["sync.js"] : []),
 ];
 for (const entry of entries) {
   if (!allowed.some((file) => entry.entryName === `${manifest.id}/${file}`))
@@ -43,11 +42,7 @@ for (const entry of entries) {
 }
 if (packaged.id !== manifest.id || packaged.version !== manifest.version)
   throw new Error("ZIP 与当前 manifest 不一致，请重新构建");
-for (const file of [
-  "main.js",
-  ...(packaged.styles ? ["main.css"] : []),
-  ...(packaged.sync ? ["sync.js"] : []),
-]) {
+for (const file of ["main.js", ...(packaged.styles ? ["main.css"] : [])]) {
   const bytes = zip.readFile(`${manifest.id}/${file}`);
   if (
     !bytes ||

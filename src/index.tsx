@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { definePlugin, type PluginSettingsProps } from "@tau/plugins";
 import { Button, Input, Select } from "@tau/ui";
+import { createS3SyncProvider } from "./sync";
 
 declare const __PLUGIN_META__: { id: string; name: string; version: string };
 function S3Settings({ syncConfig }: PluginSettingsProps) {
@@ -104,6 +105,11 @@ export default definePlugin({
   ...__PLUGIN_META__,
   create: () => ({
     activate(context) {
+      context.sync.register({
+        id: context.pluginId,
+        name: "S3",
+        create: (config) => createS3SyncProvider(config, context.fetch),
+      });
       context.settings.register({
         id: "sync",
         title: "S3 同步存储",

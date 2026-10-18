@@ -5,11 +5,8 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
-import {
-  defineSyncProvider,
-  type SyncProvider,
-  type RemoteFileInfo,
-} from "@tau/plugins/sync";
+import type { SyncProvider, RemoteFileInfo } from "@tau/plugins/sync";
+import type { HttpRequest, HttpHandlerOptions } from "@smithy/types";
 
 interface Config {
   accessKeyId: string;
@@ -35,7 +32,10 @@ function parse(value: unknown): Config {
 }
 
 export class S3SyncProvider implements SyncProvider {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly config: Config,
+    private readonly fetch: typeof globalThis.fetch,
+  ) {}
   private client() {
     return new S3Client({
       region: this.config.region,
@@ -45,6 +45,43 @@ export class S3SyncProvider implements SyncProvider {
       },
       ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
       forcePathStyle: this.config.urlStyle === "path",
+      requestHandler: {
+        handle: async (
+          request: HttpRequest,
+          options: HttpHandlerOptions = {},
+        ) => {
+          const url = new URL(
+            request.protocol +
+              "//" +
+              request.hostname +
+              (request.port ? ":" + request.port : "") +
+              request.path,
+          );
+          for (const [key, value] of Object.entries(request.query ?? {})) {
+            for (const item of Array.isArray(value) ? value : [value])
+              url.searchParams.append(key, item ?? "");
+          }
+          const headers = new Headers(request.headers);
+          headers.delete("host");
+          const body =
+            request.body instanceof Uint8Array
+              ? new Blob([new Uint8Array(request.body)])
+              : request.body;
+          const response = await this.fetch(url, {
+            method: request.method,
+            headers,
+            body,
+            signal: options.abortSignal as AbortSignal | undefined,
+          });
+          return {
+            response: {
+              statusCode: response.status,
+              headers: Object.fromEntries(response.headers),
+              body: response.body ?? undefined,
+            },
+          };
+        },
+      },
     });
   }
   private key(name: string) {
@@ -66,7 +103,7 @@ export class S3SyncProvider implements SyncProvider {
         new PutObjectCommand({
           Bucket: this.config.bucket,
           Key: this.key(name),
-          Body: Buffer.from(content),
+          Body: content,
           ...(createOnly ? { IfNoneMatch: "*" } : {}),
         }),
       );
@@ -167,8 +204,9 @@ export class S3SyncProvider implements SyncProvider {
   }
 }
 
-export default defineSyncProvider({
-  id: "tau.sync-s3",
-  name: "S3",
-  create: (config) => new S3SyncProvider(parse(config)),
-});
+export function createS3SyncProvider(
+  config: unknown,
+  fetch: typeof globalThis.fetch,
+) {
+  return new S3SyncProvider(parse(config), fetch);
+}
