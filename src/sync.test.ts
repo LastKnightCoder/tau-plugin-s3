@@ -36,6 +36,7 @@ beforeEach(async () => {
       );
     };
     if (key.endsWith("denied")) return fail(403, "AccessDenied");
+    if (key.endsWith("unsupported")) return fail(400, "NotImplemented");
     if (req.method === "GET" && url.searchParams.has("list-type")) {
       const prefix = url.searchParams.get("prefix") ?? "",
         offset = Number(url.searchParams.get("continuation-token") ?? 0),
@@ -160,6 +161,14 @@ it("分页返回相对键，删除幂等；不存在与403分离", async () => {
   });
   await expect(connection.stat("denied", options())).rejects.toMatchObject({
     code: "forbidden",
+  });
+  await expect(
+    connection.write("unsupported", source("test"), {
+      ...options(),
+      mode: "create-only",
+    }),
+  ).rejects.toMatchObject({
+    code: "unsupported",
   });
 });
 it("取消和dispose阻止后续传输，不吞成对象不存在", async () => {

@@ -78,13 +78,16 @@ function failure(error: unknown, signal: AbortSignal): never {
   if (signal.aborted) throw new SyncStorageError("cancelled", "S3传输已取消");
   if (error instanceof SyncStorageError) throw error;
   const code = status(error);
+  const serviceCode =
+    (error as { Code?: string; name?: string })?.Code ??
+    (error as { name?: string })?.name;
+  if (code === 501 || serviceCode === "NotImplemented")
+    throw new SyncStorageError("unsupported", "存储服务不支持请求的S3操作");
   if (code === 401) throw new SyncStorageError("unauthorized", "S3认证失败");
   if (code === 403)
     throw new SyncStorageError("forbidden", "S3拒绝访问，请检查凭据和权限");
   if (code === 429 || code === 503)
     throw new SyncStorageError("rate-limited", "S3限流或暂不可用，请稍后重试");
-  if (code === 501)
-    throw new SyncStorageError("unsupported", "存储服务不支持请求的S3操作");
   throw new SyncStorageError(
     "unavailable",
     "S3请求失败，写入结果可能未知，请重新检查",
