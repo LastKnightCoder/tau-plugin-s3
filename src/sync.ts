@@ -1,295 +1,160 @@
-import { createHash } from "node:crypto";
-import { Readable } from "node:stream";
 import {
   S3Client,
-  GetObjectCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   ListObjectsV2Command,
-  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import {
-  defineSyncStorage,
-  SyncStorageError,
-  type SyncStorageConnection,
-  type SyncTransferOptions,
+  defineSyncProvider,
+  type SyncProvider,
+  type RemoteFileInfo,
 } from "@tau/plugins/sync";
 
 interface Config {
-  endpoint?: string;
-  region: string;
-  bucket: string;
-  pathPrefix: string;
   accessKeyId: string;
   secretAccessKey: string;
-  urlStyle: "path" | "virtualHosted";
-}
-function parse(value: unknown): Config {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new SyncStorageError("invalid-config", "S3配置无效");
-  const input = value as Record<string, unknown>;
-  for (const name of ["region", "bucket", "accessKeyId", "secretAccessKey"])
-    if (typeof input[name] !== "string" || !(input[name] as string).trim())
-      throw new SyncStorageError(
-        "invalid-config",
-        "请填写区域、Bucket和访问凭据",
-      );
-  if (input.endpoint !== undefined && input.endpoint !== "") {
-    try {
-      const url = new URL(String(input.endpoint));
-      if (
-        !["https:", "http:"].includes(url.protocol) ||
-        url.username ||
-        url.password
-      )
-        throw new Error();
-    } catch {
-      throw new SyncStorageError("invalid-config", "S3 Endpoint无效");
-    }
-  }
-  const pathPrefix = String(input.pathPrefix ?? "").replace(/^\/+|\/+$/g, "");
-  if (pathPrefix.split("/").some((part) => part === ".." || part === "."))
-    throw new SyncStorageError("invalid-config", "S3路径前缀无效");
-  if (
-    input.urlStyle !== undefined &&
-    !["path", "virtualHosted"].includes(String(input.urlStyle))
-  )
-    throw new SyncStorageError("invalid-config", "S3地址模式无效");
-  return {
-    region: String(input.region),
-    bucket: String(input.bucket),
-    accessKeyId: String(input.accessKeyId),
-    secretAccessKey: String(input.secretAccessKey),
-    endpoint: input.endpoint ? String(input.endpoint) : undefined,
-    pathPrefix,
-    urlStyle: input.urlStyle === "virtualHosted" ? "virtualHosted" : "path",
-  };
-}
-function status(error: unknown) {
-  return (error as { $metadata?: { httpStatusCode?: number } })?.$metadata
-    ?.httpStatusCode;
-}
-function sizeOf(value: number | undefined) {
-  if (value === undefined || !Number.isSafeInteger(value) || value < 0)
-    throw new SyncStorageError("unavailable", "S3返回的对象大小无效");
-  return value;
-}
-function failure(error: unknown, signal: AbortSignal): never {
-  if (signal.aborted) throw new SyncStorageError("cancelled", "S3传输已取消");
-  if (error instanceof SyncStorageError) throw error;
-  const code = status(error);
-  const serviceCode =
-    (error as { Code?: string; name?: string })?.Code ??
-    (error as { name?: string })?.name;
-  if (code === 501 || serviceCode === "NotImplemented")
-    throw new SyncStorageError("unsupported", "存储服务不支持请求的S3操作");
-  if (code === 401) throw new SyncStorageError("unauthorized", "S3认证失败");
-  if (code === 403)
-    throw new SyncStorageError("forbidden", "S3拒绝访问，请检查凭据和权限");
-  if (code === 429 || code === 503)
-    throw new SyncStorageError("rate-limited", "S3限流或暂不可用，请稍后重试");
-  throw new SyncStorageError(
-    "unavailable",
-    "S3请求失败，写入结果可能未知，请重新检查",
-  );
-}
-function progressStream(
-  body: ReadableStream<Uint8Array>,
-  options: SyncTransferOptions,
-  total: number,
-) {
-  let transferred = 0;
-  return body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        options.signal.throwIfAborted();
-        transferred += chunk.byteLength;
-        options.onProgress?.({ transferred, total });
-        controller.enqueue(chunk);
-      },
-    }),
-    { signal: options.signal },
-  );
+  bucket: string;
+  region: string;
+  endpoint?: string;
+  urlStyle?: "path" | "virtualHosted";
+  pathPrefix: string;
 }
 
-export default defineSyncStorage({
-  id: "tau.sync-s3",
-  name: "S3 兼容存储",
-  async open(input, { signal: owner }) {
-    const config = parse(input),
-      lifetime = new AbortController();
-    owner.throwIfAborted();
-    const client = new S3Client({
-      region: config.region,
-      endpoint: config.endpoint,
-      forcePathStyle: config.urlStyle === "path",
+function parse(value: unknown): Config {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("S3配置无效");
+  const config = value as Record<string, unknown>;
+  for (const field of ["accessKeyId", "secretAccessKey", "bucket", "region"])
+    if (typeof config[field] !== "string" || !config[field])
+      throw new Error("请填写S3凭据、桶和区域");
+  return {
+    ...(config as unknown as Config),
+    pathPrefix: typeof config.pathPrefix === "string" ? config.pathPrefix : "",
+  };
+}
+
+/** 首轮迁移对齐旧桌面S3；CLI的签名读取差异另行处理。 */
+export class S3SyncProvider implements SyncProvider {
+  constructor(private readonly config: Config) {}
+  private client() {
+    return new S3Client({
+      region: this.config.region,
       credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
+        accessKeyId: this.config.accessKeyId,
+        secretAccessKey: this.config.secretAccessKey,
       },
-      maxAttempts: 1,
-      requestChecksumCalculation: "WHEN_REQUIRED",
-      responseChecksumValidation: "WHEN_REQUIRED",
+      ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
+      forcePathStyle: this.config.urlStyle === "path",
     });
-    const keyOf = (key: string) => {
-      if (
-        !key ||
-        key.startsWith("/") ||
-        key.includes("\\") ||
-        key.split("/").some((part) => part === ".." || part === ".")
-      )
-        throw new SyncStorageError("invalid-config", "远端对象名无效");
-      return config.pathPrefix ? config.pathPrefix + "/" + key : key;
-    };
-    const signalOf = (options: SyncTransferOptions) =>
-      AbortSignal.any([owner, lifetime.signal, options.signal]);
-    const target = JSON.stringify([
-      config.endpoint ?? "",
-      config.region,
-      config.bucket,
-      config.pathPrefix,
-      config.urlStyle,
-    ]);
-    const connection: SyncStorageConnection = {
-      target: {
-        identity: createHash("sha256").update(target).digest("hex"),
-        label:
-          config.bucket + (config.pathPrefix ? "/" + config.pathPrefix : ""),
-      },
-      async stat(key, options) {
-        const signal = signalOf(options);
-        try {
-          const result = await client.send(
-            new HeadObjectCommand({ Bucket: config.bucket, Key: keyOf(key) }),
-            { abortSignal: signal },
-          );
-          return {
-            key,
-            size: sizeOf(result.ContentLength),
-            modifiedAt: result.LastModified?.getTime(),
-          };
-        } catch (error) {
-          if (!signal.aborted && status(error) === 404) return null;
-          return failure(error, signal);
-        }
-      },
-      async read(key, options) {
-        const signal = signalOf(options);
-        try {
-          const result = await client.send(
-            new GetObjectCommand({ Bucket: config.bucket, Key: keyOf(key) }),
-            { abortSignal: signal },
-          );
-          if (!result.Body) throw new Error("empty body");
-          const info = {
-            key,
-            size: sizeOf(result.ContentLength),
-            modifiedAt: result.LastModified?.getTime(),
-          };
-          return {
-            info,
-            body: progressStream(
-              result.Body.transformToWebStream(),
-              { ...options, signal },
-              info.size,
-            ),
-          };
-        } catch (error) {
-          if (!signal.aborted && status(error) === 404) return null;
-          return failure(error, signal);
-        }
-      },
-      async write(key, source, options) {
-        const signal = signalOf(options);
-        if (signal.aborted)
-          throw new SyncStorageError("cancelled", "S3传输已取消");
-        const body = Readable.fromWeb(
-          progressStream(
-            source.open(),
-            { ...options, signal },
-            source.size,
-          ) as import("node:stream/web").ReadableStream<Uint8Array>,
+  }
+  private key(name: string) {
+    return this.config.pathPrefix
+      ? this.config.pathPrefix.replaceAll(/\/$|^\//g, "") + "/" + name
+      : name;
+  }
+  private url(name: string) {
+    const key = this.key(name);
+    const endpoint =
+      this.config.endpoint || `https://s3.${this.config.region}.amazonaws.com`;
+    if (this.config.urlStyle === "virtualHosted") {
+      if (this.config.endpoint) {
+        const url = new URL(this.config.endpoint);
+        return `${url.protocol}//${this.config.bucket}.${url.host}/${key}`;
+      }
+      return `https://${this.config.bucket}.s3.${this.config.region}.amazonaws.com/${key}`;
+    }
+    return (
+      endpoint.replaceAll(/\/$|^\//g, "") + "/" + this.config.bucket + "/" + key
+    );
+  }
+  uploadFile(name: string, content: Uint8Array): Promise<boolean> {
+    return this.put(name, content, false);
+  }
+  createFileIfAbsent(name: string, content: Uint8Array): Promise<boolean> {
+    return this.put(name, content, true);
+  }
+  private async put(name: string, content: Uint8Array, createOnly: boolean) {
+    const client = this.client();
+    try {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: this.config.bucket,
+          Key: this.key(name),
+          Body: Buffer.from(content),
+          ...(createOnly ? { IfNoneMatch: "*" } : {}),
+        }),
+      );
+      return true;
+    } catch {
+      // 沿用桌面返回false的控制流，发布者仍会读取后继记录确认结果。
+      return false;
+    } finally {
+      client.destroy();
+    }
+  }
+  async downloadFile(name: string): Promise<Uint8Array> {
+    const response = await fetch(this.url(name));
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  async fileExists(name: string): Promise<boolean> {
+    const response = await fetch(this.url(name), { method: "HEAD" });
+    if (response.status === 404) return false;
+    if (!response.ok) throw new Error(`S3 对象检查失败：${response.status}`);
+    return true;
+  }
+  async listFiles(prefix?: string): Promise<RemoteFileInfo[]> {
+    const base = this.config.pathPrefix
+      ? this.config.pathPrefix.replaceAll(/\/$|^\//g, "")
+      : "";
+    const extra = prefix ? prefix.replace(/^\/+/, "").replace(/\/+$/, "") : "";
+    const combined = [base, extra].filter(Boolean).join("/");
+    const client = this.client(),
+      files: RemoteFileInfo[] = [];
+    try {
+      let cursor: string | undefined;
+      do {
+        const page = await client.send(
+          new ListObjectsV2Command({
+            Bucket: this.config.bucket,
+            Prefix: combined
+              ? combined.replace(/^\/+/, "").replace(/\/+/g, "/")
+              : undefined,
+            ContinuationToken: cursor,
+          }),
         );
-        try {
-          await client.send(
-            new PutObjectCommand({
-              Bucket: config.bucket,
-              Key: keyOf(key),
-              Body: body,
-              ContentLength: source.size,
-              ...(options.mode === "create-only" ? { IfNoneMatch: "*" } : {}),
-            }),
-            { abortSignal: signal },
-          );
-          return { status: "written" };
-        } catch (error) {
-          if (
-            !signal.aborted &&
-            options.mode === "create-only" &&
-            status(error) === 412
-          )
-            return { status: "already-exists" };
-          return failure(error, signal);
-        } finally {
-          body.destroy();
+        for (const item of page.Contents ?? []) {
+          if (!item.Key || item.Key.endsWith("/")) continue;
+          const normalized = item.Key.replace(/^\/+/, "");
+          const root = base.replace(/\/+$/, "");
+          const relative =
+            root && normalized.startsWith(root + "/")
+              ? normalized.slice(root.length + 1)
+              : normalized === root
+                ? ""
+                : normalized;
+          files.push({
+            name: relative.split("/").filter(Boolean).pop() || relative,
+            path: relative,
+            size: Number(item.Size || 0),
+            lastModified: item.LastModified?.getTime(),
+          });
         }
-      },
-      async list(prefix, options) {
-        const signal = signalOf(options);
-        if (
-          !Number.isInteger(options.limit) ||
-          options.limit < 1 ||
-          options.limit > 1000
-        )
-          throw new SyncStorageError("invalid-config", "分页大小必须为1至1000");
-        const base = config.pathPrefix ? config.pathPrefix + "/" : "";
-        try {
-          const result = await client.send(
-            new ListObjectsV2Command({
-              Bucket: config.bucket,
-              Prefix: prefix ? keyOf(prefix) : base,
-              MaxKeys: options.limit,
-              ContinuationToken: options.cursor,
-            }),
-            { abortSignal: signal },
-          );
-          if (result.IsTruncated && !result.NextContinuationToken)
-            throw new Error("missing cursor");
-          return {
-            items: (result.Contents ?? [])
-              .filter(
-                (item) => item.Key?.startsWith(base) && !item.Key.endsWith("/"),
-              )
-              .map((item) => ({
-                key: item.Key!.slice(base.length),
-                size: sizeOf(item.Size),
-                modifiedAt: item.LastModified?.getTime(),
-              })),
-            nextCursor: result.IsTruncated
-              ? result.NextContinuationToken!
-              : null,
-          };
-        } catch (error) {
-          return failure(error, signal);
-        }
-      },
-      async remove(key, options) {
-        const signal = signalOf(options);
-        try {
-          await client.send(
-            new DeleteObjectCommand({ Bucket: config.bucket, Key: keyOf(key) }),
-            { abortSignal: signal },
-          );
-        } catch (error) {
-          if (!signal.aborted && status(error) === 404) return;
-          failure(error, signal);
-        }
-      },
-      async dispose() {
-        lifetime.abort();
-        client.destroy();
-      },
-    };
-    return connection;
-  },
+        cursor = page.IsTruncated
+          ? page.NextContinuationToken || undefined
+          : undefined;
+      } while (cursor);
+      return files;
+    } catch {
+      // 旧桌面将列举失败转为空列表，本次不混入错误策略调整。
+      return [];
+    } finally {
+      client.destroy();
+    }
+  }
+}
+
+export default defineSyncProvider({
+  id: "tau.sync-s3",
+  name: "S3",
+  create: (config) => new S3SyncProvider(parse(config)),
 });

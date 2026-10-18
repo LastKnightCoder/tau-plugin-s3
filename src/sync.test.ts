@@ -1,22 +1,17 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import storage from "./sync";
-import type { SyncStorageConnection } from "@tau/plugins/sync";
+import type { SyncProvider } from "@tau/plugins/sync";
 
-let server: Server, connection: SyncStorageConnection;
+let server: Server, provider: SyncProvider;
 const objects = new Map<string, Buffer>();
-const requests: { method: string; key: string; signed: boolean }[] = [];
-const options = () => ({ signal: new AbortController().signal });
-const source = (text: string) => ({
-  size: Buffer.byteLength(text),
-  open: () =>
-    new ReadableStream<Uint8Array>({
-      start(c) {
-        c.enqueue(Buffer.from(text));
-        c.close();
-      },
-    }),
-});
+const requests: {
+  method: string;
+  key: string;
+  signed: boolean;
+  condition?: string;
+}[] = [];
+const bytes = (value: string) => new TextEncoder().encode(value);
 beforeEach(async () => {
   objects.clear();
   requests.length = 0;
@@ -26,8 +21,8 @@ beforeEach(async () => {
     requests.push({
       method: req.method ?? "",
       key,
-      signed:
-        req.headers.authorization?.startsWith("AWS4-HMAC-SHA256") ?? false,
+      signed: !!req.headers.authorization,
+      condition: req.headers["if-none-match"] as string | undefined,
     });
     const fail = (status: number, code: string) => {
       res.writeHead(status, { "Content-Type": "application/xml" });
@@ -35,17 +30,20 @@ beforeEach(async () => {
         "<Error><Code>" + code + "</Code><Message>test</Message></Error>",
       );
     };
-    if (key.endsWith("denied")) return fail(403, "AccessDenied");
+    if (
+      key.endsWith("denied") ||
+      url.searchParams.get("prefix")?.endsWith("denied")
+    )
+      return fail(403, "AccessDenied");
     if (key.endsWith("unsupported")) return fail(400, "NotImplemented");
     if (req.method === "GET" && url.searchParams.has("list-type")) {
       const prefix = url.searchParams.get("prefix") ?? "",
-        offset = Number(url.searchParams.get("continuation-token") ?? 0),
-        limit = Number(url.searchParams.get("max-keys") ?? 1000);
+        offset = Number(url.searchParams.get("continuation-token") ?? 0);
       const keys = [...objects.keys()]
-          .filter((k) => k.startsWith(prefix))
-          .sort(),
-        selected = keys.slice(offset, offset + limit),
-        more = offset + limit < keys.length;
+        .filter((key) => key.startsWith(prefix))
+        .sort();
+      const selected = keys.slice(offset, offset + 1),
+        more = offset + 1 < keys.length;
       res.setHeader("Content-Type", "application/xml");
       return res.end(
         "<ListBucketResult><IsTruncated>" +
@@ -53,16 +51,16 @@ beforeEach(async () => {
           "</IsTruncated>" +
           (more
             ? "<NextContinuationToken>" +
-              (offset + limit) +
+              (offset + 1) +
               "</NextContinuationToken>"
             : "") +
           selected
             .map(
-              (k) =>
+              (key) =>
                 "<Contents><Key>" +
-                k +
+                key +
                 "</Key><Size>" +
-                objects.get(k)!.length +
+                objects.get(key)!.length +
                 "</Size></Contents>",
             )
             .join("") +
@@ -78,123 +76,77 @@ beforeEach(async () => {
       res.setHeader("ETag", '"test"');
       return res.end();
     }
-    if (req.method === "DELETE") {
-      objects.delete(key);
-      res.statusCode = 204;
-      return res.end();
-    }
     const content = objects.get(key);
     if (!content) return fail(404, "NoSuchKey");
     res.setHeader("Content-Length", content.length);
     res.setHeader("ETag", '"test"');
-    return res.end(req.method === "HEAD" ? undefined : content);
+    res.end(req.method === "HEAD" ? undefined : content);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server");
-  connection = await storage.open(
-    {
-      endpoint: "http://127.0.0.1:" + address.port,
-      bucket: "bucket",
-      region: "test-region",
-      accessKeyId: "test-only",
-      secretAccessKey: "test-only",
-      urlStyle: "path",
-      pathPrefix: "/sync",
-    },
-    options(),
-  );
+  provider = storage.create({
+    endpoint: "http://127.0.0.1:" + address.port,
+    bucket: "bucket",
+    region: "test-region",
+    accessKeyId: "test-only",
+    secretAccessKey: "test-only",
+    urlStyle: "path",
+    pathPrefix: "/sync",
+  });
 });
 afterEach(async () => {
-  await connection?.dispose();
   server.closeAllConnections();
   await new Promise<void>((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
 });
-it("签名读写与原子创建；并发仅一人成功，重复不覆盖", async () => {
+
+it("保留字节上传与桌面读取方式，普通覆盖不加条件头", async () => {
+  expect(await provider.uploadFile("data", bytes("first"))).toBe(true);
+  expect(await provider.fileExists("data")).toBe(true);
+  expect(new TextDecoder().decode(await provider.downloadFile("data"))).toBe(
+    "first",
+  );
+  expect(await provider.uploadFile("data", bytes("second"))).toBe(true);
+  expect(objects.get("sync/data")?.toString()).toBe("second");
+  expect(
+    requests
+      .filter((item) => item.method === "PUT")
+      .every((item) => item.signed && !item.condition),
+  ).toBe(true);
+  expect(
+    requests
+      .filter((item) => item.method === "GET" || item.method === "HEAD")
+      .every((item) => !item.signed),
+  ).toBe(true);
+});
+it("条件创建返回boolean，冲突或请求失败沿用false，不覆盖已有对象", async () => {
   const result = await Promise.all(
     ["one", "two"].map((value) =>
-      connection.write("head", source(value), {
-        ...options(),
-        mode: "create-only",
-      }),
+      provider.createFileIfAbsent("head", bytes(value)),
     ),
   );
-  expect(result.map((item) => item.status).sort()).toEqual([
-    "already-exists",
-    "written",
+  expect(result.filter(Boolean)).toHaveLength(1);
+  expect(["one", "two"]).toContain(objects.get("sync/head")?.toString());
+  expect(requests.every((item) => item.condition === "*")).toBe(true);
+  expect(await provider.createFileIfAbsent("unsupported", bytes("test"))).toBe(
+    false,
+  );
+  expect(await provider.uploadFile("denied", bytes("test"))).toBe(false);
+});
+it("分页在插件内部聚合，保留列表字段与旧桌面失败处理", async () => {
+  await provider.uploadFile("folder/a", bytes("a"));
+  await provider.uploadFile("folder/b", bytes("bb"));
+  expect(await provider.listFiles("folder/")).toMatchObject([
+    { name: "a", path: "folder/a", size: 1 },
+    { name: "b", path: "folder/b", size: 2 },
   ]);
-  expect(await connection.stat("head", options())).toMatchObject({
-    key: "head",
-    size: 3,
-  });
-  const read = await connection.read("head", options());
-  expect(read).not.toBeNull();
-  expect(["one", "two"]).toContain(await new Response(read!.body).text());
-  expect(requests.every((request) => request.signed)).toBe(true);
-  await connection.write("head", source("new"), {
-    ...options(),
-    mode: "replace",
-  });
-  expect(objects.get("sync/head")?.toString()).toBe("new");
+  expect(await provider.listFiles("denied")).toEqual([]);
 });
-it("分页返回相对键，删除幂等；不存在与403分离", async () => {
-  for (const key of ["a", "b"])
-    await connection.write(key, source(key), { ...options(), mode: "replace" });
-  const page = await connection.list("", { ...options(), limit: 1 });
-  expect(page.items[0].key).toBe("a");
-  expect(page.nextCursor).toBeTruthy();
-  const second = await connection.list("", {
-    ...options(),
-    limit: 1,
-    cursor: page.nextCursor!,
-  });
-  expect(second.items[0].key).toBe("b");
-  expect(second.nextCursor).toBeNull();
-  await connection.remove("a", options());
-  await connection.remove("a", options());
-  expect(await connection.read("a", options())).toBeNull();
-  expect(await connection.stat("missing", options())).toBeNull();
-  await expect(connection.read("denied", options())).rejects.toMatchObject({
-    code: "forbidden",
-  });
-  await expect(connection.stat("denied", options())).rejects.toMatchObject({
-    code: "forbidden",
-  });
-  await expect(
-    connection.write("unsupported", source("test"), {
-      ...options(),
-      mode: "create-only",
-    }),
-  ).rejects.toMatchObject({
-    code: "unsupported",
-  });
-});
-it("取消和dispose阻止后续传输，不吞成对象不存在", async () => {
-  const controller = new AbortController();
-  controller.abort();
-  await expect(
-    connection.stat("missing", { signal: controller.signal }),
-  ).rejects.toMatchObject({ code: "cancelled" });
-  await expect(
-    connection.write("missing", source("cancel"), {
-      signal: controller.signal,
-      mode: "replace",
-    }),
-  ).rejects.toMatchObject({ code: "cancelled" });
-  await connection.dispose();
-  await expect(connection.read("missing", options())).rejects.toMatchObject({
-    code: "cancelled",
-  });
-});
-it("取得下载响应后取消仍终止内容流", async () => {
-  objects.set("sync/large", Buffer.alloc(256 * 1024, 1));
-  const controller = new AbortController();
-  const response = await connection.read("large", {
-    signal: controller.signal,
-  });
-  expect(response).not.toBeNull();
-  controller.abort();
-  await expect(new Response(response!.body).arrayBuffer()).rejects.toThrow();
+it("不存在返回false，读取失败和无权限仍抛错", async () => {
+  expect(await provider.fileExists("missing")).toBe(false);
+  await expect(provider.downloadFile("missing")).rejects.toThrow("404");
+  await expect(provider.fileExists("denied")).rejects.toThrow("403");
+  await expect(provider.downloadFile("denied")).rejects.toThrow("403");
 });
