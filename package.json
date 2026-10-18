@@ -1,0 +1,23 @@
+{
+  "name": "tau-plugin-s3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "build:backend": "pnpm check && node build.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.922.0"
+  },
+  "devDependencies": {
+    "@tau/plugins": "link:../editor/packages/plugins",
+    "@types/node": "^24.0.0",
+    "typescript": "5.8.3",
+    "vitest": "^3.2.4",
+    "esbuild": "0.25.12"
+  }
+}
