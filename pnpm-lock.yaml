@@ -12,8 +12,8 @@ importers:
         specifier: 3.948.0
         version: 3.948.0
       '@tau/ui':
-        specifier: file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-ui-0.1.1.tgz
-        version: '@xiongtao.xt/tau-ui@file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-ui-0.1.1.tgz(react-dom@19.2.0(react@19.2.0))(react@19.2.0)'
+        specifier: npm:@xiongtao.xt/tau-ui@0.1.1
+        version: '@xiongtao.xt/tau-ui@0.1.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0)'
       react:
         specifier: 19.2.0
         version: 19.2.0
@@ -22,8 +22,8 @@ importers:
         version: 19.2.0(react@19.2.0)
     devDependencies:
       '@tau/plugins':
-        specifier: file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-plugins-0.8.0.tgz
-        version: '@xiongtao.xt/tau-plugins@file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-plugins-0.8.0.tgz(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(slate-dom@0.142.0(slate@0.126.2))'
+        specifier: npm:@xiongtao.xt/tau-plugins@0.9.0
+        version: '@xiongtao.xt/tau-plugins@0.9.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(slate-dom@0.142.0(slate@0.126.2))'
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
@@ -891,16 +891,14 @@ packages:
   '@vitest/utils@3.2.7':
     resolution: {integrity: sha512-x6BDOd7dyo3PFLY3I9/HJ25X/6OurhGXk2/B9gOZNPF7XDVjeBK4k01lQE5uvDpbuheErh91qYuE1E2OEjK3Rw==}
 
-  '@xiongtao.xt/tau-plugins@file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-plugins-0.8.0.tgz':
-    resolution: {integrity: sha512-7zuIXAeYEE30Kz+hOSGLAkq8UjJnFY4oYtljH2XoGlt5+vPn3grrFBdJSUX3xhjptRZFXY+ihXrCGU9rtOPDrw==, tarball: file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-plugins-0.8.0.tgz}
-    version: 0.8.0
+  '@xiongtao.xt/tau-plugins@0.9.0':
+    resolution: {integrity: sha512-QyTiI9ZN5oJxmHf4ak74MrEtfamjxrzonQ2JcmmGy5VWizA92aNKmWqrtNruzUX+KDKC/mnS8QEgi/r7+qjotA==}
     peerDependencies:
       react: 19.2.0
       react-dom: 19.2.0
 
-  '@xiongtao.xt/tau-ui@file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-ui-0.1.1.tgz':
-    resolution: {integrity: sha512-V1W90qS7zaZwbanPDA/ZJzj4rhffnrUVUaRYOeuEenBa+SENm73l6gG4SnPu+2IlqZTt8jHJILWs7fDNjx8ewQ==, tarball: file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-ui-0.1.1.tgz}
-    version: 0.1.1
+  '@xiongtao.xt/tau-ui@0.1.1':
+    resolution: {integrity: sha512-pzqrjS1Aj0jrsN2k57fN17piq0Zr5darCdwTh69VoXN/0RwBGrRUaAAHm3wScz5NMWCOyCeD0WZEGwOgAfSgNA==}
     peerDependencies:
       react: 19.2.0
       react-dom: 19.2.0
@@ -2220,7 +2218,7 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
-  '@xiongtao.xt/tau-plugins@file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-plugins-0.8.0.tgz(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(slate-dom@0.142.0(slate@0.126.2))':
+  '@xiongtao.xt/tau-plugins@0.9.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(slate-dom@0.142.0(slate@0.126.2))':
     dependencies:
       '@types/react': 19.2.0
       '@types/react-dom': 19.2.0(@types/react@19.2.0)
@@ -2234,7 +2232,7 @@ snapshots:
     transitivePeerDependencies:
       - slate-dom
 
-  '@xiongtao.xt/tau-ui@file:../editor/output/c30-wiring-sdk/xiongtao.xt-tau-ui-0.1.1.tgz(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@xiongtao.xt/tau-ui@0.1.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@types/react': 19.2.0
       '@types/react-dom': 19.2.0(@types/react@19.2.0)
