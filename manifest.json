@@ -15,7 +15,7 @@
     "R2",
     "备份"
   ],
-  "version": "0.2.3",
+  "version": "0.2.4",
   "minAppVersion": "0.59.0",
   "main": "main.js"
 }
