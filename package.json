@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@smithy/types": "4.19.0",
-    "@tau/plugins": "npm:@xiongtao.xt/tau-plugins@0.36.0",
+    "@tau/plugins": "npm:@xiongtao.xt/tau-plugins@0.37.0",
     "@types/node": "^24.0.0",
     "typescript": "5.8.3",
     "vitest": "^3.2.4",
