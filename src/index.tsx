@@ -1,13 +1,13 @@
+import { MobileSettings } from "./mobile-settings";
 import { useState } from "react";
-import { definePlugin, type PluginSettingsProps } from "@tau/plugins";
+import { definePlugin, usePluginEnvironment, type PluginSettingsProps } from "@tau/plugins";
 import { Button, Input, Select, SettingRow } from "@tau/ui";
 import { createS3SyncProvider } from "./sync";
 
 declare const __PLUGIN_META__: { id: string; name: string; version: string };
 function S3Settings({ syncConfig }: PluginSettingsProps) {
   const value = syncConfig?.value;
-  const fields =
-    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const fields = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const [config, setConfig] = useState(() => ({
     endpoint: String(fields.endpoint ?? ""),
     bucket: String(fields.bucket ?? ""),
@@ -28,7 +28,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
     setError("");
     setSaved(false);
     try {
-      await syncConfig.save(config);
+      await syncConfig.save({ ...fields, ...config });
       setSaved(true);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "保存失败");
@@ -49,7 +49,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, endpoint: event.target.value });
           }}
@@ -67,7 +67,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, bucket: event.target.value });
           }}
@@ -85,7 +85,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, region: event.target.value });
           }}
@@ -102,7 +102,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, pathPrefix: event.target.value });
           }}
@@ -120,7 +120,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, accessKeyId: event.target.value });
           }}
@@ -138,7 +138,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
           autoComplete="off"
           spellCheck={false}
           disabled={saving}
-          onChange={(event) => {
+          onChange={event => {
             setSaved(false);
             setConfig({ ...config, secretAccessKey: event.target.value });
           }}
@@ -154,7 +154,7 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
             { value: "path", label: "路径模式" },
             { value: "virtualHosted", label: "虚拟主机模式" },
           ]}
-          onValueChange={(urlStyle) => {
+          onValueChange={urlStyle => {
             setSaved(false);
             setConfig({ ...config, urlStyle });
           }}
@@ -184,6 +184,15 @@ function S3Settings({ syncConfig }: PluginSettingsProps) {
     </>
   );
 }
+function SettingsView(props: PluginSettingsProps) {
+  const environment = usePluginEnvironment();
+  return environment.platform === "desktop" ? (
+    <S3Settings {...props} />
+  ) : (
+    <MobileSettings {...props} />
+  );
+}
+
 export default definePlugin({
   ...__PLUGIN_META__,
   create: () => ({
@@ -191,13 +200,13 @@ export default definePlugin({
       context.sync.register({
         id: context.pluginId,
         name: "S3",
-        create: (config) => createS3SyncProvider(config, context.fetch),
+        create: config => createS3SyncProvider(config, context.fetch),
       });
       context.settings.register({
         id: "sync",
         title: "S3 同步存储",
         target: "sync",
-        component: S3Settings,
+        component: SettingsView,
       });
     },
   }),

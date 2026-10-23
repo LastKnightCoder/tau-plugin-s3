@@ -1,21 +1,20 @@
 {
-  "formatVersion": 1,
-  "apiVersion": 1,
-  "platform": "desktop",
-  "format": "cjs",
   "id": "tau.sync-s3",
   "name": "S3 同步存储",
   "description": "通过 S3 兼容存储同步数据，配置位于客户端的同步设置。",
-  "categories": [
-    "sync"
-  ],
-  "keywords": [
-    "S3",
-    "MinIO",
-    "R2",
-    "备份"
-  ],
-  "version": "0.3.1",
-  "minAppVersion": "0.59.0",
-  "main": "main.js"
+  "categories": ["sync"],
+  "keywords": ["S3", "MinIO", "R2", "备份"],
+  "version": "0.4.0",
+  "requires": ["fetch", "sync"],
+  "targets": {
+    "desktop": {
+      "minAppVersion": "0.59.2"
+    },
+    "android": {
+      "minAppVersion": "0.2.3"
+    },
+    "ios": {
+      "minAppVersion": "0.2.3"
+    }
+  }
 }
