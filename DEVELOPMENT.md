@@ -1,5 +1,7 @@
 # 开发与构建
 
+当前依赖、平台边界与验证步骤见 [兼容性说明](COMPATIBILITY.md)。
+
 ## 自动发布
 
 本仓库的.github/workflows/release.yml与公开模板一致。同步更新package.json和manifest.json版本并提交后，推送对应版本tag即可自动安装依赖、运行测试（若定义）、构建并将ZIP上传到GitHub Release，无需手动上传或配置额外Token。
