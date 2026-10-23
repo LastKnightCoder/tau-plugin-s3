@@ -19,8 +19,7 @@ interface Config {
 }
 
 function parse(value: unknown): Config {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("S3配置无效");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("S3配置无效");
   const config = value as Record<string, unknown>;
   for (const field of ["accessKeyId", "secretAccessKey", "bucket", "region"])
     if (typeof config[field] !== "string" || !config[field])
@@ -34,7 +33,7 @@ function parse(value: unknown): Config {
 export class S3SyncProvider implements SyncProvider {
   constructor(
     private readonly config: Config,
-    private readonly fetch: typeof globalThis.fetch,
+    private readonly fetch: typeof globalThis.fetch
   ) {}
   private client() {
     return new S3Client({
@@ -46,16 +45,13 @@ export class S3SyncProvider implements SyncProvider {
       ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
       forcePathStyle: this.config.urlStyle === "path",
       requestHandler: {
-        handle: async (
-          request: HttpRequest,
-          options: HttpHandlerOptions = {},
-        ) => {
+        handle: async (request: HttpRequest, options: HttpHandlerOptions = {}) => {
           const url = new URL(
             request.protocol +
               "//" +
               request.hostname +
               (request.port ? ":" + request.port : "") +
-              request.path,
+              request.path
           );
           for (const [key, value] of Object.entries(request.query ?? {})) {
             for (const item of Array.isArray(value) ? value : [value])
@@ -105,7 +101,7 @@ export class S3SyncProvider implements SyncProvider {
           Key: this.key(name),
           Body: content,
           ...(createOnly ? { IfNoneMatch: "*" } : {}),
-        }),
+        })
       );
       return true;
     } catch {
@@ -122,7 +118,7 @@ export class S3SyncProvider implements SyncProvider {
         new GetObjectCommand({
           Bucket: this.config.bucket,
           Key: this.key(name),
-        }),
+        })
       );
       const bytes = await response.Body?.transformToByteArray();
       if (!bytes) throw new Error("S3返回空响应体");
@@ -138,14 +134,11 @@ export class S3SyncProvider implements SyncProvider {
         new HeadObjectCommand({
           Bucket: this.config.bucket,
           Key: this.key(name),
-        }),
+        })
       );
       return true;
     } catch (error) {
-      if (
-        (error as { $metadata?: { httpStatusCode?: number } }).$metadata
-          ?.httpStatusCode === 404
-      )
+      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404)
         return false;
       throw error;
     } finally {
@@ -153,11 +146,8 @@ export class S3SyncProvider implements SyncProvider {
     }
   }
   async listFiles(prefix?: string): Promise<RemoteFileInfo[]> {
-    const base = this.config.pathPrefix
-      ? this.config.pathPrefix.replaceAll(/\/$|^\//g, "")
-      : "";
-    const extra = prefix ? prefix.replace(/^\/+/, "").replace(/\/+$/, "") : "";
-    const combined = [base, extra].filter(Boolean).join("/");
+    const root = this.key("");
+    const combined = this.key(prefix ?? "");
     let client: S3Client | undefined;
     const files: RemoteFileInfo[] = [];
     try {
@@ -167,22 +157,13 @@ export class S3SyncProvider implements SyncProvider {
         const page = await client.send(
           new ListObjectsV2Command({
             Bucket: this.config.bucket,
-            Prefix: combined
-              ? combined.replace(/^\/+/, "").replace(/\/+/g, "/")
-              : undefined,
+            Prefix: combined || undefined,
             ContinuationToken: cursor,
-          }),
+          })
         );
         for (const item of page.Contents ?? []) {
-          if (!item.Key || item.Key.endsWith("/")) continue;
-          const normalized = item.Key.replace(/^\/+/, "");
-          const root = base.replace(/\/+$/, "");
-          const relative =
-            root && normalized.startsWith(root + "/")
-              ? normalized.slice(root.length + 1)
-              : normalized === root
-                ? ""
-                : normalized;
+          if (!item.Key || item.Key.endsWith("/") || !item.Key.startsWith(root)) continue;
+          const relative = item.Key.slice(root.length);
           files.push({
             name: relative.split("/").filter(Boolean).pop() || relative,
             path: relative,
@@ -190,23 +171,15 @@ export class S3SyncProvider implements SyncProvider {
             lastModified: item.LastModified?.getTime(),
           });
         }
-        cursor = page.IsTruncated
-          ? page.NextContinuationToken || undefined
-          : undefined;
+        cursor = page.IsTruncated ? page.NextContinuationToken || undefined : undefined;
       } while (cursor);
       return files;
-    } catch {
-      // 旧桌面将列举失败转为空列表，本次不混入错误策略调整。
-      return [];
     } finally {
       client?.destroy();
     }
   }
 }
 
-export function createS3SyncProvider(
-  config: unknown,
-  fetch: typeof globalThis.fetch,
-) {
+export function createS3SyncProvider(config: unknown, fetch: typeof globalThis.fetch) {
   return new S3SyncProvider(parse(config), fetch);
 }

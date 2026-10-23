@@ -28,23 +28,16 @@ beforeEach(async () => {
     });
     const fail = (status: number, code: string) => {
       res.writeHead(status, { "Content-Type": "application/xml" });
-      res.end(
-        "<Error><Code>" + code + "</Code><Message>test</Message></Error>",
-      );
+      res.end("<Error><Code>" + code + "</Code><Message>test</Message></Error>");
     };
     if (!req.headers.authorization) return fail(403, "AccessDenied");
-    if (
-      key.endsWith("denied") ||
-      url.searchParams.get("prefix")?.endsWith("denied")
-    )
+    if (key.endsWith("denied") || url.searchParams.get("prefix")?.endsWith("denied"))
       return fail(403, "AccessDenied");
     if (key.endsWith("unsupported")) return fail(400, "NotImplemented");
     if (req.method === "GET" && url.searchParams.has("list-type")) {
       const prefix = url.searchParams.get("prefix") ?? "",
         offset = Number(url.searchParams.get("continuation-token") ?? 0);
-      const keys = [...objects.keys()]
-        .filter((key) => key.startsWith(prefix))
-        .sort();
+      const keys = [...objects.keys()].filter(key => key.startsWith(prefix)).sort();
       const selected = keys.slice(offset, offset + 1),
         more = offset + 1 < keys.length;
       res.setHeader("Content-Type", "application/xml");
@@ -52,22 +45,18 @@ beforeEach(async () => {
         "<ListBucketResult><IsTruncated>" +
           more +
           "</IsTruncated>" +
-          (more
-            ? "<NextContinuationToken>" +
-              (offset + 1) +
-              "</NextContinuationToken>"
-            : "") +
+          (more ? "<NextContinuationToken>" + (offset + 1) + "</NextContinuationToken>" : "") +
           selected
             .map(
-              (key) =>
+              key =>
                 "<Contents><Key>" +
                 key +
                 "</Key><Size>" +
                 objects.get(key)!.length +
-                "</Size></Contents>",
+                "</Size></Contents>"
             )
             .join("") +
-          "</ListBucketResult>",
+          "</ListBucketResult>"
       );
     }
     if (req.method === "PUT") {
@@ -85,7 +74,7 @@ beforeEach(async () => {
     res.setHeader("ETag", '"test"');
     res.end(req.method === "HEAD" ? undefined : content);
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("test server");
   provider = createS3SyncProvider(
@@ -98,13 +87,13 @@ beforeEach(async () => {
       urlStyle: "path",
       pathPrefix: "/sync",
     },
-    transport,
+    transport
   );
 });
 afterEach(async () => {
   server.closeAllConnections();
   await new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
+    server.close(error => (error ? reject(error) : resolve()))
   );
 });
 
@@ -112,44 +101,38 @@ it("私有桶读写均使用签名，普通覆盖不加条件头", async () => {
   expect(await provider.uploadFile("data", bytes("first"))).toBe(true);
   expect(new Headers(transport.mock.calls[0][1]?.headers).get("content-length")).toBe("5");
   expect(await provider.fileExists("data")).toBe(true);
-  expect(new TextDecoder().decode(await provider.downloadFile("data"))).toBe(
-    "first",
-  );
+  expect(new TextDecoder().decode(await provider.downloadFile("data"))).toBe("first");
   expect(await provider.uploadFile("data", bytes("second"))).toBe(true);
   expect(objects.get("sync/data")?.toString()).toBe("second");
   expect(
-    requests
-      .filter((item) => item.method === "PUT")
-      .every((item) => item.signed && !item.condition),
+    requests.filter(item => item.method === "PUT").every(item => item.signed && !item.condition)
   ).toBe(true);
   expect(
     requests
-      .filter((item) => item.method === "GET" || item.method === "HEAD")
-      .every((item) => item.signed),
+      .filter(item => item.method === "GET" || item.method === "HEAD")
+      .every(item => item.signed)
   ).toBe(true);
 });
 it("条件创建返回boolean，冲突或请求失败沿用false，不覆盖已有对象", async () => {
   const result = await Promise.all(
-    ["one", "two"].map((value) =>
-      provider.createFileIfAbsent("head", bytes(value)),
-    ),
+    ["one", "two"].map(value => provider.createFileIfAbsent("head", bytes(value)))
   );
   expect(result.filter(Boolean)).toHaveLength(1);
   expect(["one", "two"]).toContain(objects.get("sync/head")?.toString());
-  expect(requests.every((item) => item.condition === "*")).toBe(true);
-  expect(await provider.createFileIfAbsent("unsupported", bytes("test"))).toBe(
-    false,
-  );
+  expect(requests.every(item => item.condition === "*")).toBe(true);
+  expect(await provider.createFileIfAbsent("unsupported", bytes("test"))).toBe(false);
   expect(await provider.uploadFile("denied", bytes("test"))).toBe(false);
 });
-it("分页在插件内部聚合，保留列表字段与旧桌面失败处理", async () => {
+it("分页在插件内部聚合，列举失败不伪装为空目录", async () => {
   await provider.uploadFile("folder/a", bytes("a"));
   await provider.uploadFile("folder/b", bytes("bb"));
   expect(await provider.listFiles("folder/")).toMatchObject([
     { name: "a", path: "folder/a", size: 1 },
     { name: "b", path: "folder/b", size: 2 },
   ]);
-  expect(await provider.listFiles("denied")).toEqual([]);
+  await expect(provider.listFiles("denied")).rejects.toMatchObject({
+    $metadata: { httpStatusCode: 403 },
+  });
 });
 it("不存在返回false，读取失败和无权限仍抛错", async () => {
   expect(await provider.fileExists("missing")).toBe(false);
@@ -162,4 +145,12 @@ it("不存在返回false，读取失败和无权限仍抛错", async () => {
   await expect(provider.downloadFile("denied")).rejects.toMatchObject({
     $metadata: { httpStatusCode: 403 },
   });
+});
+
+it("目录前缀保留末尾斜杠，不包含同名前缀的其他目录", async () => {
+  await provider.uploadFile("resources/a", bytes("a"));
+  await provider.uploadFile("resources-old/b", bytes("b"));
+  expect(await provider.listFiles("resources/")).toMatchObject([
+    { name: "a", path: "resources/a" },
+  ]);
 });
