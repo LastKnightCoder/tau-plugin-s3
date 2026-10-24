@@ -4,17 +4,16 @@
   "description": "通过 S3 兼容存储同步数据，配置位于客户端的同步设置。",
   "categories": ["sync"],
   "keywords": ["S3", "MinIO", "R2", "备份"],
-  "version": "0.4.0",
-  "requires": ["fetch", "sync"],
+  "version": "0.4.1",
   "targets": {
     "desktop": {
-      "minAppVersion": "0.59.2"
+      "minAppVersion": "0.59.4"
     },
     "android": {
-      "minAppVersion": "0.2.3"
+      "minAppVersion": "0.2.4"
     },
     "ios": {
-      "minAppVersion": "0.2.3"
+      "minAppVersion": "0.2.4"
     }
   }
 }
