@@ -69,11 +69,13 @@ export class S3SyncProvider implements SyncProvider {
             body,
             signal: options.abortSignal as AbortSignal | undefined,
           });
+          const empty = request.method === "HEAD" || (request.method === "PUT" && response.ok);
+          if (empty) await response.body?.cancel().catch(() => undefined);
           return {
             response: {
               statusCode: response.status,
               headers: Object.fromEntries(response.headers),
-              body: response.body ?? undefined,
+              body: empty ? undefined : (response.body ?? undefined),
             },
           };
         },

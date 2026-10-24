@@ -154,3 +154,16 @@ it("目录前缀保留末尾斜杠，不包含同名前缀的其他目录", asyn
     { name: "a", path: "resources/a" },
   ]);
 });
+
+it("连续分块 PUT 完成后控制响应已释放", async () => {
+  for (let index = 0; index < 24; index++)
+    expect(await provider.uploadFile(`parts/${index}.bin`, new Uint8Array([index]))).toBe(true);
+  const writes = transport.mock.calls
+    .map((call, index) => ({ method: call[1]?.method, result: transport.mock.results[index] }))
+    .filter(item => item.method === "PUT");
+  expect(writes).toHaveLength(24);
+  for (const item of writes) {
+    const response = (await item.result.value) as Response;
+    if (response.body) expect(response.bodyUsed).toBe(true);
+  }
+});
