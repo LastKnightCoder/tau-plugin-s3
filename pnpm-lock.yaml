@@ -895,7 +895,7 @@ packages:
     resolution: {integrity: sha512-x6BDOd7dyo3PFLY3I9/HJ25X/6OurhGXk2/B9gOZNPF7XDVjeBK4k01lQE5uvDpbuheErh91qYuE1E2OEjK3Rw==}
 
   '@xiongtao.xt/tau-plugins@0.38.0':
-    resolution: {integrity: sha512-p6ul8MuLc8HQ7Ye8lg3GZhtKQ+DZVO0CIfFSGPJk+gQrOunztLlWdYO9TtVzJB8OgmcK96/lXQZrOiilHJ60SQ==}
+    resolution: {integrity: sha512-T2FH+tIRzOpOG6///IxRszuE+c1QM+IPavTHXhimk6roI5S0023qOrJjzq3Egq11N3dU9bu7R3xalDa6jptnBg==}
     version: 0.38.0
     peerDependencies:
       react: 19.2.0
