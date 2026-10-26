@@ -32,8 +32,8 @@ const form: ProviderForm = {
           type: "choice",
           default: "path",
           options: [
-            { value: "path", label: "路径模式" },
-            { value: "virtualHosted", label: "虚拟主机模式" },
+            { value: "path", label: "路径模式", description: "地址形如 endpoint/bucket/对象，兼容性最好" },
+            { value: "virtualHosted", label: "虚拟主机模式", description: "地址形如 bucket.endpoint/对象" },
           ],
         },
       ],
