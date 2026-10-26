@@ -1,7 +1,7 @@
 {
   "id": "tau.sync-s3",
   "name": "S3 同步存储",
-  "description": "通过 S3 兼容存储同步数据，配置位于客户端的同步设置。",
+  "description": "通过 S3 兼容存储同步数据，在插件设置中填写账号与存储位置。",
   "categories": ["sync"],
   "keywords": ["S3", "MinIO", "R2", "备份"],
   "version": "0.4.2",
