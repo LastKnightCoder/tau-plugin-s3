@@ -17,16 +17,16 @@
       "keywords": ["S3", "MinIO", "R2", "backup"]
     }
   },
-  "version": "0.4.6",
+  "version": "0.4.7",
   "targets": {
     "desktop": {
       "minAppVersion": "0.68.0"
     },
     "android": {
-      "minAppVersion": "0.6.0"
+      "minAppVersion": "0.7.0"
     },
     "ios": {
-      "minAppVersion": "0.6.0"
+      "minAppVersion": "0.7.0"
     }
   }
 }
