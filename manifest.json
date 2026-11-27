@@ -4,16 +4,29 @@
   "description": "通过 S3 兼容存储同步数据，在插件设置中填写账号与存储位置。",
   "categories": ["sync"],
   "keywords": ["S3", "MinIO", "R2", "备份"],
-  "version": "0.4.5",
+  "locales": ["zh-CN", "zh-TW", "en-US"],
+  "i18n": {
+    "zh-TW": {
+      "name": "S3 同步儲存",
+      "description": "透過相容 S3 的儲存服務同步資料，在外掛設定中填寫帳號與儲存位置。",
+      "keywords": ["S3", "MinIO", "R2", "備份"]
+    },
+    "en-US": {
+      "name": "S3 Sync Storage",
+      "description": "Sync your Tau data with S3-compatible storage. Configure your account and storage location in plugin settings.",
+      "keywords": ["S3", "MinIO", "R2", "backup"]
+    }
+  },
+  "version": "0.4.6",
   "targets": {
     "desktop": {
-      "minAppVersion": "0.60.2"
+      "minAppVersion": "0.68.0"
     },
     "android": {
-      "minAppVersion": "0.2.9"
+      "minAppVersion": "0.6.0"
     },
     "ios": {
-      "minAppVersion": "0.2.9"
+      "minAppVersion": "0.6.0"
     }
   }
 }

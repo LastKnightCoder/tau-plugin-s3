@@ -1,0 +1,16 @@
+{
+  "account.title": "帳號",
+  "account.accessKey": "Access Key ID",
+  "account.secret": "Secret Access Key",
+  "location.title": "儲存位置",
+  "location.bucket": "Bucket",
+  "location.region": "區域",
+  "location.endpoint": "服務位址",
+  "location.endpointHint": "使用相容 S3 的服務（R2、MinIO 等）時填寫",
+  "location.path": "目錄",
+  "style.label": "網址模式",
+  "style.path": "路徑模式",
+  "style.pathHint": "網址格式為 endpoint/bucket/物件，相容性最佳",
+  "style.virtual": "虛擬主機模式",
+  "style.virtualHint": "網址格式為 bucket.endpoint/物件"
+}

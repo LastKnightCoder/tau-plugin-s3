@@ -1,0 +1,16 @@
+{
+  "account.title": "账号",
+  "account.accessKey": "Access Key ID",
+  "account.secret": "Secret Access Key",
+  "location.title": "存储位置",
+  "location.bucket": "Bucket",
+  "location.region": "区域",
+  "location.endpoint": "服务地址",
+  "location.endpointHint": "兼容 S3 的服务（R2、MinIO 等）填写",
+  "location.path": "目录",
+  "style.label": "地址模式",
+  "style.path": "路径模式",
+  "style.pathHint": "地址形如 endpoint/bucket/对象，兼容性最好",
+  "style.virtual": "虚拟主机模式",
+  "style.virtualHint": "地址形如 bucket.endpoint/对象"
+}

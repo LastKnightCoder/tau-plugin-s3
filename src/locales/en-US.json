@@ -1,0 +1,16 @@
+{
+  "account.title": "Account",
+  "account.accessKey": "Access Key ID",
+  "account.secret": "Secret Access Key",
+  "location.title": "Storage location",
+  "location.bucket": "Bucket",
+  "location.region": "Region",
+  "location.endpoint": "Service endpoint",
+  "location.endpointHint": "Set this for an S3-compatible service such as R2 or MinIO",
+  "location.path": "Directory",
+  "style.label": "Addressing style",
+  "style.path": "Path style",
+  "style.pathHint": "Address format: endpoint/bucket/object, for best compatibility",
+  "style.virtual": "Virtual-hosted style",
+  "style.virtualHint": "Address format: bucket.endpoint/object"
+}
